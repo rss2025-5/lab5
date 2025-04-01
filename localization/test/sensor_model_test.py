@@ -2,6 +2,8 @@ import numpy as np
 import rclpy
 from nav_msgs.msg import OccupancyGrid
 from rclpy.node import Node
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 from localization.sensor_model import SensorModel
 from localization.test import TEST_PRECOMPUTED_TABLE, TEST_SENSOR_MODEL_OUTPUT_PROBABILITIES, \
@@ -40,6 +42,8 @@ class SensorModelTest(Node):
         self.sensor_model.table_width = Args.table_width
 
         self.tol = Args.tolerance
+        self.sensor_model.sensor_model_plot()
+        plt.savefig("sensor_model_plot.png")
 
         map_topic = self.get_parameter('map_topic').get_parameter_value().string_value
 

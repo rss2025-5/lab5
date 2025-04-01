@@ -29,7 +29,7 @@ class MotionModelTest(Node):
 
     def test_evaluate_motion_model(self):
         
-        self.motion_model.deterministic = True
+        self.motion_model.deterministic = False
 
         try:
             actual = self.motion_model.evaluate(self.particles, self.odom)
