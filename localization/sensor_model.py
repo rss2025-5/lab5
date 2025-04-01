@@ -58,25 +58,20 @@ class SensorModel:
             1)
 
     def precompute_sensor_model(self):
-        z_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
-        d_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
+        z_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
+        d_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
 
         # Precompute the Gaussian function (for p_hit)
         gaussian_kernel = np.where((z_values >= 0) & (z_values <= self.z_max), np.exp(-((z_values - d_values)**2) / (2 * self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)), 0)
         self.node.get_logger().info(f"gaussian_kernel shape:{gaussian_kernel.shape}")
-        # Compute sum_hit for each d_value (this replaces the first loop)
-        sum_hit = np.sum(gaussian_kernel)
+
+        sum_hit = np.sum(gaussian_kernel, axis=0).reshape(1, -1) # sum column
 
         # normalize p_hit
         p_hit = gaussian_kernel / sum_hit
 
-        # Compute p_short (only need to calculate this where 0 <= z <= d)
         p_short = np.where((z_values<= d_values) & (d_values != 0) & (z_values >= 0), 2 / d_values * (1 - z_values/d_values), 0)
-
-        # Compute p_max (1 for z == self.z_max, 0 otherwise)
         p_max = np.where((z_values <= self.z_max) & (z_values >= self.z_max - 0.1), 1/0.1, 0)
-
-        # Compute p_rand (constant value for each z)
         p_rand = np.where((z_values >= 0) & (z_values <= self.z_max), 1/self.z_max, 0)
 
         self.node.get_logger().info(f"p_hit shape:{p_hit.shape}")
@@ -90,10 +85,9 @@ class SensorModel:
                         self.alpha_max * p_max +
                         self.alpha_rand * p_rand)
 
-        # Normalize the table (row-wise normalization, axis=0)
+        # Normalize the table
         sensor_model /= np.sum(sensor_model, axis=0)
 
-        # Store the result in self.sensor_model_table
         self.sensor_model_table = sensor_model
 
 
