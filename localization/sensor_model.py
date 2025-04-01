@@ -32,8 +32,8 @@ class SensorModel:
         self.alpha_short = 0.07
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
-        self.sigma_hit = 8
-        self.z_max = 10
+        self.sigma_hit = 8.0
+        self.z_max = 10.0
 
         self.table_width = 201
 
@@ -118,10 +118,30 @@ class SensorModel:
         observation = np.clip(observation / (self.resolution * self.lidar_scale_to_map_scale), 0, self.z_max)
         scans = np.clip(scans, 0, self.z_max)
 
+        self.node.get_logger().info(f"scan shape:{scans.shape}")
+        self.node.get_logger().info(f"observation shape:{observation.shape}")
+
+
         scan_indices = np.round(scans * (self.table_width - 1) / self.z_max).astype(int)
         obs_indices = np.round(observation * (self.table_width - 1) / self.z_max).astype(int)
 
-        probabilities = self.sensor_model_table[obs_indices, scan_indices]
+        # new 2 lines from chat:
+        scan_indices = np.clip(scan_indices, 0, self.table_width - 1)
+        obs_indices = np.clip(obs_indices, 0, self.table_width - 1)
+
+        self.node.get_logger().info(f"scan_indices shape:{scan_indices.shape}")
+        self.node.get_logger().info(f"obs_indices shape:{obs_indices.shape}")
+
+        probabilities = np.prod(self.sensor_model_table[obs_indices, scan_indices], axis=-1)
+
+        # probabilities = np.zeros(particles.shape[0])
+
+        # # Iterate over each particle
+        # for i in range(particles.shape[0]):
+        #     probabilities[i] = self.sensor_model_table[obs_indices[i], scan_indices[i]]
+
+        self.node.get_logger().info(f"probabilities shape:{probabilities.shape}")
+
         return probabilities
 
     def map_callback(self, map_msg):
