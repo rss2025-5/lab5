@@ -12,6 +12,7 @@ np.set_printoptions(threshold=sys.maxsize)
 
 class SensorModel:
     def __init__(self, node):
+        self.node = node # delete this later
         node.declare_parameter('map_topic', "default")
         node.declare_parameter('num_beams_per_particle', 1)
         node.declare_parameter('scan_theta_discretization', 1.0)
@@ -57,26 +58,44 @@ class SensorModel:
             1)
 
     def precompute_sensor_model(self):
-        z_values = np.linspace(0, self.z_max, self.table_width)
-        d_values = np.linspace(0, self.z_max, self.table_width)
-        
-        for j, d in enumerate(d_values):
-            sum_hit = 0
-            for i, z in enumerate(z_values):
-                sum_hit += (np.exp(-((z - d)**2 / 2*self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)))
-            for i, z in enumerate(z_values):
-                p_hit = (np.exp(-((z - d)**2 / 2*self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)))/sum_hit
-                p_short = (2 / d) * (1 - z / d) if 0 <= z <= d and d > 0 else 0
-                p_max = 1 if z == self.z_max else 0
-                p_rand = 1 / self.z_max
-                
-                self.sensor_model_table[i, j] = (
-                    self.alpha_hit * p_hit +
-                    self.alpha_short * p_short +
-                    self.alpha_max * p_max +
-                    self.alpha_rand * p_rand
-                )
-            self.sensor_model_table[:, j] /= np.sum(self.sensor_model_table[:, j])
+        z_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
+        d_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
+
+        # Precompute the Gaussian function (for p_hit)
+        gaussian_kernel = np.where((z_values >= 0) & (z_values <= self.z_max), np.exp(-((z_values - d_values)**2) / (2 * self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)), 0)
+        self.node.get_logger().info(f"gaussian_kernel shape:{gaussian_kernel.shape}")
+        # Compute sum_hit for each d_value (this replaces the first loop)
+        sum_hit = np.sum(gaussian_kernel)
+
+        # normalize p_hit
+        p_hit = gaussian_kernel / sum_hit
+
+        # Compute p_short (only need to calculate this where 0 <= z <= d)
+        p_short = np.where((z_values<= d_values) & (d_values != 0) & (z_values >= 0), 2 / d_values * (1 - z_values/d_values), 0)
+
+        # Compute p_max (1 for z == self.z_max, 0 otherwise)
+        p_max = np.where((z_values <= self.z_max) & (z_values >= self.z_max - 0.1), 1/0.1, 0)
+
+        # Compute p_rand (constant value for each z)
+        p_rand = np.where((z_values >= 0) & (z_values <= self.z_max), 1/self.z_max, 0)
+
+        self.node.get_logger().info(f"p_hit shape:{p_hit.shape}")
+        self.node.get_logger().info(f"p_short shape:{p_short.shape}")
+        self.node.get_logger().info(f"p_max shape:{p_max.shape}")
+        self.node.get_logger().info(f"p_rand shape:{p_rand.shape}")
+
+        # Combine all components to form the sensor model table (using broadcasting)
+        sensor_model = (self.alpha_hit * p_hit +
+                        self.alpha_short * p_short +
+                        self.alpha_max * p_max +
+                        self.alpha_rand * p_rand)
+
+        # Normalize the table (row-wise normalization, axis=0)
+        sensor_model /= np.sum(sensor_model, axis=0)
+
+        # Store the result in self.sensor_model_table
+        self.sensor_model_table = sensor_model
+
 
     def evaluate(self, particles, observation):
         """
@@ -100,14 +119,14 @@ class SensorModel:
         """
         if not self.map_set:
             return np.ones(len(particles))/len(particles)
-        
+
         scans = self.scan_sim.scan(particles) / (self.resolution * self.lidar_scale_to_map_scale)
         observation = np.clip(observation / (self.resolution * self.lidar_scale_to_map_scale), 0, self.z_max)
         scans = np.clip(scans, 0, self.z_max)
-        
+
         scan_indices = np.round(scans * (self.table_width - 1) / self.z_max).astype(int)
         obs_indices = np.round(observation * (self.table_width - 1) / self.z_max).astype(int)
-        
+
         probabilities = self.sensor_model_table[obs_indices, scan_indices]
         return probabilities
 
@@ -151,4 +170,3 @@ class SensorModel:
         ax.set_zlabel('Probability p(z | d)')
         ax.set_title('Sensor Model 3D Plot')
         plt.show()
-
