@@ -81,7 +81,8 @@ class ParticleFilter(Node):
         # and the particle_filter_frame.
 
         # Particle filter settings
-        self.num_particles = 100  # TODO: USE PARAM VALUE
+        self.declare_parameter('num_particles', 100)
+        self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
         self.particles = np.random.uniform(low=-5, high=5, size=(self.num_particles, 3))  # Initial random particles
         self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Equal weights initially
 
@@ -155,12 +156,15 @@ class ParticleFilter(Node):
         Compute the average pose of the particles, considering angular wraparound.
         """
         angles = self.particles[:, 2]
-        sin_sum = np.sum(np.sin(angles))
-        cos_sum = np.sum(np.cos(angles))
+        sin_sum = np.sum(np.multiply(np.sin(angles), self.particle_weights))/np.sum(self.particle_weights)
+        cos_sum = np.sum(np.multiply(np.cos(angles), self.particle_weights))/np.sum(self.particle_weights)
         avg_angle = np.arctan2(sin_sum, cos_sum)
 
-        avg_x = np.mean(self.particles[:, 0])
-        avg_y = np.mean(self.particles[:, 1])
+        # avg_x = np.average(np.array(self.particles[:, 0]), self.particle_weights)
+        avg_x = np.sum(np.multiply(self.particles[:,0], self.particle_weights))/np.sum(self.particle_weights)
+        # avg_y = np.average(np.array(self.particles[:, 1]), self.particle_weights)
+        avg_y = np.sum(np.multiply(self.particles[:,1], self.particle_weights))/np.sum(self.particle_weights)
+
 
         return avg_x, avg_y, avg_angle
 
