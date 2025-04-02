@@ -33,7 +33,7 @@ class SensorModel:
         self.alpha_max = 0.07
         self.alpha_rand = 0.12
         self.sigma_hit = 8.0
-        self.z_max = 10.0
+        self.z_max = 200.0
 
         self.table_width = 201
 
@@ -58,26 +58,24 @@ class SensorModel:
             1)
 
     def precompute_sensor_model(self):
-        z_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
-        d_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
+        z_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
+        d_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
+
+        self.node.get_logger().info(f"z values:{z_values}")
+
 
         # Precompute the Gaussian function (for p_hit)
         gaussian_kernel = np.where((z_values >= 0) & (z_values <= self.z_max), np.exp(-((z_values - d_values)**2) / (2 * self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)), 0)
         self.node.get_logger().info(f"gaussian_kernel shape:{gaussian_kernel.shape}")
 
-        sum_hit = np.sum(gaussian_kernel, axis=0).reshape(1, -1) # sum column
+        sum_hit = np.sum(gaussian_kernel, axis=0).reshape(1,-1) # sum column
 
         # normalize p_hit
         p_hit = gaussian_kernel / sum_hit
 
         p_short = np.where((z_values<= d_values) & (d_values != 0) & (z_values >= 0), 2 / d_values * (1 - z_values/d_values), 0)
-        p_max = np.where((z_values <= self.z_max) & (z_values >= self.z_max - 0.1), 1/0.1, 0)
+        p_max = np.where((z_values == self.z_max), 1, 0)
         p_rand = np.where((z_values >= 0) & (z_values <= self.z_max), 1/self.z_max, 0)
-
-        self.node.get_logger().info(f"p_hit shape:{p_hit.shape}")
-        self.node.get_logger().info(f"p_short shape:{p_short.shape}")
-        self.node.get_logger().info(f"p_max shape:{p_max.shape}")
-        self.node.get_logger().info(f"p_rand shape:{p_rand.shape}")
 
         # Combine all components to form the sensor model table (using broadcasting)
         sensor_model = (self.alpha_hit * p_hit +

@@ -25,7 +25,7 @@ class ParticleFilter(Node):
         #     a twist component, you will only be provided with the
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
-        
+
         self.declare_parameter('odom_topic', "/odom")
         self.declare_parameter('scan_topic', "/scan")
 
@@ -74,6 +74,14 @@ class ParticleFilter(Node):
         #
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
+
+        # Particle filter settings
+        self.num_particles = 100  # Set the number of particles
+        self.particles = np.random.uniform(low=-5, high=5, size=(self.num_particles, 3))  # Initial random particles
+        self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Equal weights initially
+
+        # TF broadcaster for particle filter pose
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
 
 def main(args=None):
