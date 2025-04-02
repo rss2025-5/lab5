@@ -1,5 +1,6 @@
 from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
+import time
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point
@@ -87,6 +88,8 @@ class ParticleFilter(Node):
         # TF broadcaster for particle filter pose
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
+        self.prev_t = None
+
         self.get_logger().info("=============+READY+=============")
 
     def laser_callback(self, msg):
@@ -113,9 +116,19 @@ class ParticleFilter(Node):
         dy = msg.twist.twist.linear.y
         dtheta = msg.twist.twist.angular.z
 
+        if self.prev_t is None:
+            self.prev_t = time.perf_counter()
+
+        dt = time.perf_counter() - self.prev_t
+
+        self.prev_t = time.perf_counter()
+
         # Use the motion model to update the particle positions
         odometry = np.array([dx, dy, dtheta])
+        odometry = odometry*dt
+        self.get_logger().info(f"odom: {odometry}")
         self.particles = self.motion_model.evaluate(self.particles, odometry)
+
 
     def pose_callback(self, msg):
         """
@@ -170,6 +183,8 @@ class ParticleFilter(Node):
         quat_msg.x, quat_msg.y, quat_msg.z, quat_msg.w = quaternion_from_euler(0, 0, avg_angle)
         odom_msg.pose.pose.orientation = quat_msg
 
+
+
         self.odom_pub.publish(odom_msg)
 
         # Publish TF transform between map and base_link_pf
@@ -185,7 +200,7 @@ class ParticleFilter(Node):
 
         self.tf_broadcaster.sendTransform(transform)
 
-        self.get_logger().info(f"particles: {self.particles}")
+        # self.get_logger().info(f"particles: {self.particles}")
 
         pose_array_msg = PoseArray()
         pose_array_msg.header.frame_id = "map"
@@ -204,7 +219,7 @@ class ParticleFilter(Node):
             pose_msg.orientation = quat2_msg
 
             pose_array_msg.poses.append(pose_msg)
-        self.get_logger().info(f"pose_array = {pose_array_msg}")
+
         self.pose_list.publish(pose_array_msg)
 
 
