@@ -2,7 +2,7 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point
 
 from rclpy.node import Node
 import rclpy
@@ -44,7 +44,8 @@ class ParticleFilter(Node):
         self.odom_sub = self.create_subscription(Odometry, odom_topic,
                                                  self.odom_callback,
                                                  1)
-
+        self.pose_list = self.create_publisher(PoseArray, "/all_poses", 10)
+        self.predicted_pose = self.create_publisher(Pose, "/predicted_pose", 10)
         #  *Important Note #2:* You must respond to pose
         #     initialization requests sent to the /initialpose
         #     topic. You can test that this works properly using the
@@ -79,7 +80,7 @@ class ParticleFilter(Node):
         # and the particle_filter_frame.
 
         # Particle filter settings
-        self.num_particles = 100  # Set the number of particles
+        self.num_particles = 100  # TODO: USE PARAM VALUE
         self.particles = np.random.uniform(low=-5, high=5, size=(self.num_particles, 3))  # Initial random particles
         self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Equal weights initially
 
@@ -93,7 +94,9 @@ class ParticleFilter(Node):
         Callback for laser scan messages.
         """
         # Use the sensor model to evaluate likelihood
-        probabilities = self.sensor_model.evaluate(self.particles, msg.ranges)
+        probabilities = self.sensor_model.evaluate(self.particles, np.array(msg.ranges))
+        probabilities = probabilities/np.sum(probabilities)
+
 
         # Resample particles based on probabilities
         self.resample_particles(probabilities)
@@ -162,7 +165,10 @@ class ParticleFilter(Node):
 
         odom_msg.pose.pose.position.x = avg_x
         odom_msg.pose.pose.position.y = avg_y
-        odom_msg.pose.pose.orientation = quaternion_from_euler(0, 0, avg_angle)
+
+        quat_msg = Quaternion()
+        quat_msg.x, quat_msg.y, quat_msg.z, quat_msg.w = quaternion_from_euler(0, 0, avg_angle)
+        odom_msg.pose.pose.orientation = quat_msg
 
         self.odom_pub.publish(odom_msg)
 
@@ -175,9 +181,33 @@ class ParticleFilter(Node):
         transform.transform.translation.x = avg_x
         transform.transform.translation.y = avg_y
         transform.transform.translation.z = 0.0
-        transform.transform.rotation = quaternion_from_euler(0, 0, avg_angle)
+        transform.transform.rotation = quat_msg
 
         self.tf_broadcaster.sendTransform(transform)
+
+        self.get_logger().info(f"particles: {self.particles}")
+
+        pose_array_msg = PoseArray()
+        pose_array_msg.header.frame_id = "map"
+        pose_array_msg.poses = []
+
+        for pt in self.particles:
+            quat2_msg = Quaternion()
+            quat2_msg.x, quat2_msg.y, quat2_msg.z, quat2_msg.w = quaternion_from_euler(0, 0, pt[2])
+            point_msg = Point()
+            point_msg.x = pt[0]
+            point_msg.y = pt[1]
+            point_msg.z = 0.0
+
+            pose_msg = Pose()
+            pose_msg.position = point_msg
+            pose_msg.orientation = quat2_msg
+
+            pose_array_msg.poses.append(pose_msg)
+        self.get_logger().info(f"pose_array = {pose_array_msg}")
+        self.pose_list.publish(pose_array_msg)
+
+
 
 
 def main(args=None):

@@ -61,12 +61,12 @@ class SensorModel:
         z_values = np.linspace(0, self.z_max, self.table_width).reshape(-1, 1) # column vector
         d_values = np.linspace(0, self.z_max, self.table_width).reshape(1, -1) # row vector
 
-        self.node.get_logger().info(f"z values:{z_values}")
+        # self.node.get_logger().info(f"z values:{z_values}")
 
 
         # Precompute the Gaussian function (for p_hit)
         gaussian_kernel = np.where((z_values >= 0) & (z_values <= self.z_max), np.exp(-((z_values - d_values)**2) / (2 * self.sigma_hit**2)) / (np.sqrt(2 * np.pi * self.sigma_hit**2)), 0)
-        self.node.get_logger().info(f"gaussian_kernel shape:{gaussian_kernel.shape}")
+        # self.node.get_logger().info(f"gaussian_kernel shape:{gaussian_kernel.shape}")
 
         sum_hit = np.sum(gaussian_kernel, axis=0).reshape(1,-1) # sum column
 
@@ -116,8 +116,8 @@ class SensorModel:
         observation = np.clip(observation / (self.resolution * self.lidar_scale_to_map_scale), 0, self.z_max)
         scans = np.clip(scans, 0, self.z_max)
 
-        self.node.get_logger().info(f"scan shape:{scans.shape}")
-        self.node.get_logger().info(f"observation shape:{observation.shape}")
+        # self.node.get_logger().info(f"scan shape:{scans.shape}")
+        # self.node.get_logger().info(f"observation shape:{observation.shape}")
 
 
         scan_indices = np.round(scans * (self.table_width - 1) / self.z_max).astype(int)
@@ -127,8 +127,8 @@ class SensorModel:
         scan_indices = np.clip(scan_indices, 0, self.table_width - 1)
         obs_indices = np.clip(obs_indices, 0, self.table_width - 1)
 
-        self.node.get_logger().info(f"scan_indices shape:{scan_indices.shape}")
-        self.node.get_logger().info(f"obs_indices shape:{obs_indices.shape}")
+        # self.node.get_logger().info(f"scan_indices shape:{scan_indices.shape}")
+        # self.node.get_logger().info(f"obs_indices shape:{obs_indices.shape}")
 
         probabilities = np.prod(self.sensor_model_table[obs_indices, scan_indices], axis=-1)
 
@@ -138,7 +138,7 @@ class SensorModel:
         # for i in range(particles.shape[0]):
         #     probabilities[i] = self.sensor_model_table[obs_indices[i], scan_indices[i]]
 
-        self.node.get_logger().info(f"probabilities shape:{probabilities.shape}")
+        # self.node.get_logger().info(f"probabilities shape:{probabilities.shape}")
 
         return probabilities
 
