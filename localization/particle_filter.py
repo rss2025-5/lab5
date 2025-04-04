@@ -2,6 +2,8 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 import time
 
+from .utils import se3_to_tf, tf_to_se3
+
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point
 
@@ -90,6 +92,16 @@ class ParticleFilter(Node):
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         self.prev_t = None
+
+        # base link tf stuff
+        timer_period = 0.025  # seconds
+        self.timer = self.create_timer(timer_period, self.timer_callback)
+
+        self.t = time.perf_counter()
+        self.br = tf2_ros.TransformBroadcaster(self)
+
+        self.tfBuffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
 
         self.get_logger().info("=============+READY+=============")
 
@@ -225,6 +237,16 @@ class ParticleFilter(Node):
             pose_array_msg.poses.append(pose_msg)
 
         self.pose_list.publish(pose_array_msg)
+
+    def timer_callback(self):
+        try:
+            base_wrt_odom_msg: TransformStamped = self.tfBuffer.lookup_transform('odom', 'base_link',
+                                                                                rclpy.time.Time())
+        except tf2_ros.TransformException:
+            self.get_logger().info('waiting on parent')
+            return
+
+        self.get_logger().info('Published ground truth')
 
 
 
