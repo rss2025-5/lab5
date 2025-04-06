@@ -5,7 +5,7 @@ import time
 from .utils import se3_to_tf, tf_to_se3
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point
+from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point, PoseStamped
 
 from rclpy.node import Node
 import rclpy
@@ -17,6 +17,9 @@ from sensor_msgs.msg import LaserScan
 import tf2_ros
 from tf_transformations import euler_from_quaternion, quaternion_from_euler
 import numpy as np
+from std_msgs.msg import Float32
+from tf2_geometry_msgs import do_transform_pose
+import math
 
 class ParticleFilter(Node):
 
@@ -102,6 +105,10 @@ class ParticleFilter(Node):
 
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
+        self.ground_truth_pose = Pose()
+
+        # error stuff
+        self.error_pub = self.create_publisher(Float32, "/error", 10)
 
         self.get_logger().info("=============+READY+=============")
 
@@ -137,7 +144,7 @@ class ParticleFilter(Node):
         self.prev_t = time.perf_counter()
 
         # Use the motion model to update the particle positions
-        odometry = np.array([dx, dy, dtheta])
+        odometry = np.array([dx, dy, dtheta]) # make negative for on the car
         odometry = odometry*dt
         self.get_logger().info(f"odom: {odometry}")
         self.particles = self.motion_model.evaluate(self.particles, odometry)
@@ -238,13 +245,21 @@ class ParticleFilter(Node):
 
         self.pose_list.publish(pose_array_msg)
 
+        err_msg = Float32()
+        err_msg.data = math.dist([avg_x, avg_y], [self.ground_truth_pose.position.x, self.ground_truth_pose.position.y])
+        self.error_pub.publish(err_msg)
+
     def timer_callback(self):
         try:
-            base_wrt_odom_msg: TransformStamped = self.tfBuffer.lookup_transform('odom', 'base_link',
+            base_wrt_map_msg: TransformStamped = self.tfBuffer.lookup_transform('map', 'base_link',
                                                                                 rclpy.time.Time())
         except tf2_ros.TransformException:
             self.get_logger().info('waiting on parent')
             return
+
+        # how to use TransformStamped to get ground truth pose?
+        self.ground_truth_pose.position = base_wrt_map_msg.transform.position
+        self.ground_truth_pose.orientation = base_wrt_map_msg.transform.orientation
 
         self.get_logger().info('Published ground truth')
 
