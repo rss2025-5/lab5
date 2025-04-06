@@ -257,9 +257,12 @@ class ParticleFilter(Node):
             self.get_logger().info('waiting on parent')
             return
 
-        # how to use TransformStamped to get ground truth pose?
-        self.ground_truth_pose.position = base_wrt_map_msg.transform.position
-        self.ground_truth_pose.orientation = base_wrt_map_msg.transform.orientation
+        true_point = Point()
+        true_point.x = base_wrt_map_msg.transform.translation.x
+        true_point.y = base_wrt_map_msg.transform.translation.y
+        true_point.z = base_wrt_map_msg.transform.translation.z
+        self.ground_truth_pose.position = true_point
+        self.ground_truth_pose.orientation = base_wrt_map_msg.transform.rotation
 
         self.get_logger().info('Published ground truth')
 
