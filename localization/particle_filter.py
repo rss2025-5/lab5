@@ -37,7 +37,7 @@ class ParticleFilter(Node):
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
 
-        self.declare_parameter('odom_topic', "/odom")
+        self.declare_parameter('odom_topic', "/vesc/odom")
         self.declare_parameter('scan_topic', "/scan")
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
@@ -107,6 +107,8 @@ class ParticleFilter(Node):
         self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
         self.ground_truth_pose = Pose()
 
+        self.gt_pub = self.create_publisher(Pose, "/gt", 1)
+
         # error stuff
         self.error_pub = self.create_publisher(Float32, "/error", 10)
 
@@ -144,7 +146,7 @@ class ParticleFilter(Node):
         self.prev_t = time.perf_counter()
 
         # Use the motion model to update the particle positions
-        odometry = np.array([dx, dy, dtheta]) # make negative for on the car
+        odometry = np.array([-dx, -dy, -dtheta]) # make negative for on the car
         odometry = odometry*dt
         self.get_logger().info(f"odom: {odometry}")
         self.particles = self.motion_model.evaluate(self.particles, odometry)
@@ -214,7 +216,7 @@ class ParticleFilter(Node):
         transform = TransformStamped()
         transform.header.stamp = self.get_clock().now().to_msg()
         transform.header.frame_id = "map"
-        transform.child_frame_id = "base_link_pf"
+        transform.child_frame_id = "base_link"
 
         transform.transform.translation.x = avg_x
         transform.transform.translation.y = avg_y
@@ -265,6 +267,7 @@ class ParticleFilter(Node):
         self.ground_truth_pose.orientation = base_wrt_map_msg.transform.rotation
 
         self.get_logger().info('Published ground truth')
+        self.gt_pub.publish(self.ground_truth_pose)
 
 
 
