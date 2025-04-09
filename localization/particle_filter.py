@@ -86,7 +86,7 @@ class ParticleFilter(Node):
         # and the particle_filter_frame.
 
         # Particle filter settings
-        self.declare_parameter('num_particles', 100)
+        self.declare_parameter('num_particles', 75)
         self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
         self.particles = np.random.uniform(low=-5, high=5, size=(self.num_particles, 3))  # Initial random particles
         self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Equal weights initially
@@ -107,7 +107,7 @@ class ParticleFilter(Node):
         self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
         self.ground_truth_pose = Pose()
 
-        self.gt_pub = self.create_publisher(Pose, "/gt", 1)
+        self.gt_pub = self.create_publisher(PoseStamped, "/gt", 1)
 
         # error stuff
         self.error_pub = self.create_publisher(Float32, "/error", 10)
@@ -120,8 +120,9 @@ class ParticleFilter(Node):
         """
         # Use the sensor model to evaluate likelihood
         probabilities = self.sensor_model.evaluate(self.particles, np.array(msg.ranges))
+        #probabilities = np.power(probabilities, 1.3)
         probabilities = probabilities/np.sum(probabilities)
-
+    
 
         # Resample particles based on probabilities
         self.resample_particles(probabilities)
@@ -148,9 +149,9 @@ class ParticleFilter(Node):
         # Use the motion model to update the particle positions
         odometry = np.array([-dx, -dy, -dtheta]) # make negative for on the car
         odometry = odometry*dt
-        self.get_logger().info(f"odom: {odometry}")
+        # self.get_logger().info(f"odom: {odometry}")
         self.particles = self.motion_model.evaluate(self.particles, odometry)
-
+        self.publish_particle_pose()
 
     def pose_callback(self, msg):
         """
@@ -161,31 +162,35 @@ class ParticleFilter(Node):
         x, y, theta = initial_pose.position.x, initial_pose.position.y, euler_from_quaternion([initial_pose.orientation.x, initial_pose.orientation.y, initial_pose.orientation.z, initial_pose.orientation.w])[2]
 
         # Initialize particles with random spread around the initial pose
-        self.particles = np.random.normal(loc=[x, y, theta], scale=0.5, size=(self.num_particles, 3))  # Standard deviation can be adjusted
+        self.particles = np.random.normal(loc=[x, y, theta], scale=0.3, size=(self.num_particles, 3))  # Standard deviation can be adjusted
         self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Reset particle weights
 
     def resample_particles(self, probabilities):
         """
         Resample particles based on their probabilities.
         """
-        indices = np.random.choice(self.num_particles, size=self.num_particles, p=probabilities)
+        indices = np.random.choice(self.num_particles, size=self.num_particles,replace = True,  p=probabilities)
         self.particles = self.particles[indices]
-        self.particle_weights = self.particle_weights[indices]  # Re-weight based on the resampled particles
+        #self.particle_weights = self.particle_weights[indices]
+        #self.particle_weights = np.power(self.particle_weights, 0.3)# Re-weight based on the resampled particles
 
     def compute_average_pose(self):
         """
         Compute the average pose of the particles, considering angular wraparound.
         """
+        # old_cop = self.particle_weights
+        # self.particle_weights = np.ones(self.particle_weights.shape[0])
         angles = self.particles[:, 2]
-        sin_sum = np.sum(np.multiply(np.sin(angles), self.particle_weights))/np.sum(self.particle_weights)
-        cos_sum = np.sum(np.multiply(np.cos(angles), self.particle_weights))/np.sum(self.particle_weights)
+        sin_sum = np.sum(np.sin(angles))
+        cos_sum = np.sum(np.cos(angles))
         avg_angle = np.arctan2(sin_sum, cos_sum)
 
-        # avg_x = np.average(np.array(self.particles[:, 0]), self.particle_weights)
-        avg_x = np.sum(np.multiply(self.particles[:,0], self.particle_weights))/np.sum(self.particle_weights)
-        # avg_y = np.average(np.array(self.particles[:, 1]), self.particle_weights)
-        avg_y = np.sum(np.multiply(self.particles[:,1], self.particle_weights))/np.sum(self.particle_weights)
-
+        avg_x = np.average(np.array(self.particles[:, 0]))
+        # avg_x = np.sum(np.multiply(self.particles[:,0], self.particle_weights))/np.sum(self.particle_weights)
+        avg_y = np.average(np.array(self.particles[:, 1]))
+        # avg_y = np.sum(np.multiply(self.particles[:,1], self.particle_weights))/np.sum(self.particle_weights)
+ 
+        # self.particle_weights = old_cop
 
         return avg_x, avg_y, avg_angle
 
@@ -253,12 +258,12 @@ class ParticleFilter(Node):
 
     def timer_callback(self):
         try:
-            base_wrt_map_msg: TransformStamped = self.tfBuffer.lookup_transform('map', 'base_link',
-                                                                                rclpy.time.Time())
+            base_wrt_map_msg: TransformStamped = self.tfBuffer.lookup_transform('map', 'base_link', rclpy.time.Time())
         except tf2_ros.TransformException:
             self.get_logger().info('waiting on parent')
             return
 
+        
         true_point = Point()
         true_point.x = base_wrt_map_msg.transform.translation.x
         true_point.y = base_wrt_map_msg.transform.translation.y
@@ -266,8 +271,13 @@ class ParticleFilter(Node):
         self.ground_truth_pose.position = true_point
         self.ground_truth_pose.orientation = base_wrt_map_msg.transform.rotation
 
+        self.br.sendTransform([base_wrt_map_msg])
+
         self.get_logger().info('Published ground truth')
-        self.gt_pub.publish(self.ground_truth_pose)
+        gtp = PoseStamped()
+        gtp.pose = self.ground_truth_pose
+        gtp.header.frame_id = "map"
+        self.gt_pub.publish(gtp)
 
 
 
