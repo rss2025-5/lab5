@@ -87,6 +87,7 @@ class SensorModel:
         sensor_model /= np.sum(sensor_model, axis=0)
 
         self.sensor_model_table = sensor_model
+        #self.node.get_logger().info(f"precomputed model {self.sensor_model_table}")
 
 
     def evaluate(self, particles, observation):
@@ -115,30 +116,37 @@ class SensorModel:
         scans = self.scan_sim.scan(particles) / (self.resolution * self.lidar_scale_to_map_scale)
         observation = np.clip(observation / (self.resolution * self.lidar_scale_to_map_scale), 0, self.z_max)
         scans = np.clip(scans, 0, self.z_max)
-
+        
         # self.node.get_logger().info(f"scan shape:{scans.shape}")
         # self.node.get_logger().info(f"observation shape:{observation.shape}")
+        lin_scans = np.linspace(0, scans.shape[1]-1, self.num_beams_per_particle, dtype = int)
+        lin_obs = np.linspace(0, observation.shape[0]-1, self.num_beams_per_particle, dtype = int)
+        
+        scans = scans[:,lin_scans]
+        observation = observation[lin_obs]
+        
 
-
-        scan_indices = np.round(scans * (self.table_width - 1) / self.z_max).astype(int)
-        obs_indices = np.round(observation * (self.table_width - 1) / self.z_max).astype(int)
+        #scan_indices = np.round(scans * (self.table_width - 1) / self.z_max).astype(int)
+        #obs_indices = np.round(observation * (self.table_width - 1) / self.z_max).astype(int)
 
         # new 2 lines from chat:
-        scan_indices = np.clip(scan_indices, 0, self.table_width - 1)
-        obs_indices = np.clip(obs_indices, 0, self.table_width - 1)
+        scan_indices =np.round(np.clip(scans, 0, self.table_width - 1)).astype(int)
+        obs_indices = np.round(np.clip(observation, 0, self.table_width - 1)).astype(int)
 
-        # self.node.get_logger().info(f"scan_indices shape:{scan_indices.shape}")
-        # self.node.get_logger().info(f"obs_indices shape:{obs_indices.shape}")
+        #self.node.get_logger().info(f"scan_indices: {scan_indices}")
+        #self.node.get_logger().info(f"obs_indices: {obs_indices}")
 
-        probabilities = np.prod(self.sensor_model_table[obs_indices, scan_indices], axis=-1)
-
+        probabilities = np.prod(self.sensor_model_table[obs_indices, scan_indices], axis=1)
+        
+        # self.node.get_logger().info(f"one result: {self.sensor_model_table[obs_indices, scan_indices[:2]]}")
         # probabilities = np.zeros(particles.shape[0])
 
         # # Iterate over each particle
         # for i in range(particles.shape[0]):
         #     probabilities[i] = self.sensor_model_table[obs_indices[i], scan_indices[i]]
 
-        # self.node.get_logger().info(f"probabilities shape:{probabilities.shape}")
+        # self.node.get_logger().info(f"probabilities: {probabilities}")
+        # self.node.get_logger().info(f"shape: {probabilities.shape}")
 
         return probabilities
 

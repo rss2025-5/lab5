@@ -34,7 +34,7 @@ class ParticleFilter(Node):
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
 
-        self.declare_parameter('odom_topic', "/odom")
+        self.declare_parameter('odom_topic', "/vesc/odom")
         self.declare_parameter('scan_topic', "/scan")
 
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
@@ -83,7 +83,7 @@ class ParticleFilter(Node):
         # and the particle_filter_frame.
 
         # Particle filter settings
-        self.declare_parameter('num_particles', 100)
+        self.declare_parameter('num_particles', 200)
         self.num_particles = self.get_parameter("num_particles").get_parameter_value().integer_value
         self.particles = np.random.uniform(low=-5, high=5, size=(self.num_particles, 3))  # Initial random particles
         self.particle_weights = np.ones(self.num_particles) / self.num_particles  # Equal weights initially
@@ -111,8 +111,9 @@ class ParticleFilter(Node):
         """
         # Use the sensor model to evaluate likelihood
         probabilities = self.sensor_model.evaluate(self.particles, np.array(msg.ranges))
+        #self.get_logger().info(f"prob:{probabilities}") 
+        #probabilities = np.power(np.array(probabilities), 0.3)
         probabilities = probabilities/np.sum(probabilities)
-
 
         # Resample particles based on probabilities
         self.resample_particles(probabilities)
@@ -137,10 +138,11 @@ class ParticleFilter(Node):
         self.prev_t = time.perf_counter()
 
         # Use the motion model to update the particle positions
-        odometry = np.array([dx, dy, dtheta])
+        odometry = np.array([-dx, -dy, -dtheta])
         odometry = odometry*dt
-        self.get_logger().info(f"odom: {odometry}")
+        #self.get_logger().info(f"odom: {odometry}")
         self.particles = self.motion_model.evaluate(self.particles, odometry)
+        self.publish_particle_pose()
 
 
     def pose_callback(self, msg):
@@ -161,6 +163,7 @@ class ParticleFilter(Node):
         """
         indices = np.random.choice(self.num_particles, size=self.num_particles, p=probabilities)
         self.particles = self.particles[indices]
+        # self.get_logger().info(f"resampling indices: {indices}")
         self.particle_weights = self.particle_weights[indices]  # Re-weight based on the resampled particles
 
     def compute_average_pose(self):
@@ -207,7 +210,7 @@ class ParticleFilter(Node):
         transform = TransformStamped()
         transform.header.stamp = self.get_clock().now().to_msg()
         transform.header.frame_id = "map"
-        transform.child_frame_id = "base_link_pf"
+        transform.child_frame_id = "base_link"
 
         transform.transform.translation.x = avg_x
         transform.transform.translation.y = avg_y
@@ -235,7 +238,7 @@ class ParticleFilter(Node):
             pose_msg.orientation = quat2_msg
 
             pose_array_msg.poses.append(pose_msg)
-
+        #self.get_logger().info(f"{self.particles}")
         self.pose_list.publish(pose_array_msg)
 
     def timer_callback(self):
@@ -243,10 +246,10 @@ class ParticleFilter(Node):
             base_wrt_odom_msg: TransformStamped = self.tfBuffer.lookup_transform('odom', 'base_link',
                                                                                 rclpy.time.Time())
         except tf2_ros.TransformException:
-            self.get_logger().info('waiting on parent')
+            #self.get_logger().info('waiting on parent')
             return
 
-        self.get_logger().info('Published ground truth')
+        #self.get_logger().info('Published ground truth')
 
 
 
