@@ -9,9 +9,9 @@ class MotionModel:
         self.node = node
 
         # Noise parameters (tune these values based on experimental data)
-        self.noise_std_x = 0.1       # Standard deviation for x movement
-        self.noise_std_y = 0.05      # Standard deviation for y movement
-        self.noise_std_theta = 0.1   # Standard deviation for rotation
+        self.noise_std_x = 0.01       # Standard deviation for x movement
+        self.noise_std_y = 0.01      # Standard deviation for y movement
+        self.noise_std_theta = 0.01   # Standard deviation for rotationi
         self.prev_t = None
 
     def evaluate(self, particles, odometry):

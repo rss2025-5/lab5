@@ -1,11 +1,13 @@
 from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 import time
+import math
 
 from .utils import se3_to_tf, tf_to_se3
 
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, TransformStamped, Quaternion, PoseArray, Pose, Point
+from std_msgs.msg import Float32
 
 from rclpy.node import Node
 import rclpy
@@ -67,7 +69,7 @@ class ParticleFilter(Node):
         #     "/map" frame.
 
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
-
+        self.error_pub = self.create_publisher(Float32, "/error", 1)
         # Initialize the models
         self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
@@ -103,6 +105,8 @@ class ParticleFilter(Node):
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
 
+        self.loc = [0.0, 0.0]
+
         self.get_logger().info("=============+READY+=============")
 
     def laser_callback(self, msg):
@@ -130,6 +134,7 @@ class ParticleFilter(Node):
         dy = msg.twist.twist.linear.y
         dtheta = msg.twist.twist.angular.z
 
+        self.loc = [msg.pose.pose.position.x, msg.pose.pose.position.y] 
         if self.prev_t is None:
             self.prev_t = time.perf_counter()
 
@@ -240,6 +245,10 @@ class ParticleFilter(Node):
             pose_array_msg.poses.append(pose_msg)
         #self.get_logger().info(f"{self.particles}")
         self.pose_list.publish(pose_array_msg)
+
+        err = Float32()
+        err.data = math.dist([avg_x, avg_y], self.loc)
+        self.error_pub.publish(err)
 
     def timer_callback(self):
         try:
